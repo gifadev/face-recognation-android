@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.detectedfacerecognation" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Primary color applied to the app's toolbar or action bar -->
+        <item name="colorPrimary">@color/color_primary</item>
+        <!-- Darker shade for the status bar -->
+        <item name="colorPrimaryDark">@color/color_primary</item>
+        <!-- Optional accent color for interactive elements -->
+        <item name="colorAccent">@color/color_primary</item>
+        <item name="statusBarBackground">@color/color_primary</item>
+        <item name="android:windowIsTranslucent">true</item>
+
+        <!-- Remove splash screen properties if present -->
+        <!-- <item name="windowSplashScreenBackground">@color/yourSplashColor</item> -->
+        <!-- <item name="windowSplashScreenAnimatedIcon">@drawable/yourSplashIcon</item> -->
+        <!-- <item name="postSplashScreenTheme">@style/Theme.YourApp</item> -->
+
+    </style>
+
+    <style name="Theme.RemoveSplashScreenTheme" parent="@style/Theme.detectedfacerecognation">
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+</resources>
