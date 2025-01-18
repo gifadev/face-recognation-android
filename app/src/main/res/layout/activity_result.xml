@@ -40,16 +40,37 @@
             android:src="@drawable/baseline_arrow_back_ios_24"
             app:tint="@color/white" />
 
+
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="20dp"
+            app:cardCornerRadius="20dp"
+            android:layout_alignParentEnd="true"
+            app:cardElevation="4dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <ImageView
+                android:id="@+id/floating"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/floating" />
+        </androidx.cardview.widget.CardView>
+
+
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="739dp"
             android:orientation="vertical"
-            android:padding="30dp">
+            android:padding="70dp">
 
             <ImageView
                 android:id="@+id/imgv_face"
-                android:layout_width="150dp"
-                android:layout_height="150dp"
+                android:layout_width="200dp"
+                android:layout_height="200dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_launcher_background" />
 
@@ -57,9 +78,9 @@
                 android:id="@+id/tv_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_gravity="center"
                 android:layout_marginTop="13dp"
                 android:gravity="center"
-                android:layout_gravity="center"
                 android:text="Unkown"
                 android:textColor="#1EBEF2"
                 android:textSize="20sp"
@@ -68,215 +89,247 @@
             <GridLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:columnCount="3"
+                android:layout_gravity="center"
                 android:layout_marginTop="20dp"
-                android:layout_gravity="center" >
+                android:columnCount="3"
+                android:gravity="center">
 
-            <!-- Row 2 -->
+                <!-- Row 2 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Place/Date"
-                    android:textColor="@color/white"
                     android:layout_marginStart="5dp"
+                    android:text="Place Of Birth"
+                    android:textColor="@color/white"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_place"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
-                <!-- Row 3 -->
+                <!-- Row 2 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Address"
-                    android:textColor="@color/white"
                     android:layout_marginStart="5dp"
+                    android:text="Place Of Date"
+                    android:textColor="@color/white"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
+
+                <TextView
+                    android:id="@+id/tv_date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="Unknown"
+                    android:textColor="@color/white" />
+
+
+                <!-- Row 3 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="Address"
+                    android:textColor="@color/white"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_address"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 4 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
                     android:text="Nationality"
                     android:textColor="@color/white"
-                    android:layout_marginStart="5dp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_nationality"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 5 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
                     android:text="Passport"
                     android:textColor="@color/white"
-                    android:layout_marginStart="5dp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_passport"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 6 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:gravity="center"
                     android:text="Gender"
                     android:textColor="@color/white"
-                    android:textStyle="bold"
-                    android:layout_marginStart="5dp"
-                    android:gravity="center"/>
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_gender"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 7 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:gravity="center"
                     android:text="NationalID"
                     android:textColor="@color/white"
-                    android:textStyle="bold"
-                    android:layout_marginStart="5dp"
-                    android:gravity="center"/>
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_nationalid"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 8 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
                     android:text="Marital"
                     android:textColor="@color/white"
-                    android:layout_marginStart="5dp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
                     android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
                 <TextView
                     android:id="@+id/tv_marital"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Unknown"
                     android:layout_marginStart="5dp"
+                    android:text="Unknown"
                     android:textColor="@color/white" />
 
                 <!-- Row 9 -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Score"
-                    android:textColor="@color/white"
-                    android:layout_marginStart="5dp"
-                    android:textStyle="bold" />
+                <!--                <TextView-->
+                <!--                    android:layout_width="wrap_content"-->
+                <!--                    android:layout_height="wrap_content"-->
+                <!--                    android:text="Score"-->
+                <!--                    android:textColor="@color/white"-->
+                <!--                    android:layout_marginStart="5dp"-->
+                <!--                    android:textStyle="bold" />-->
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text=":"
-                    android:gravity="center"
-                    android:layout_marginStart="5dp"
-                    android:textColor="@color/white"/>
+                <!--                <TextView-->
+                <!--                    android:layout_width="wrap_content"-->
+                <!--                    android:layout_height="wrap_content"-->
+                <!--                    android:text=":"-->
+                <!--                    android:gravity="center"-->
+                <!--                    android:layout_marginStart="5dp"-->
+                <!--                    android:textColor="@color/white"/>-->
 
-                <TextView
-                    android:id="@+id/tv_score"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Unknown"
-                    android:layout_marginStart="5dp"
-                    android:textColor="@color/white" />
+                <!--                <TextView-->
+                <!--                    android:id="@+id/tv_score"-->
+                <!--                    android:layout_width="wrap_content"-->
+                <!--                    android:layout_height="wrap_content"-->
+                <!--                    android:text="Unknown"-->
+                <!--                    android:layout_marginStart="5dp"-->
+                <!--                    android:textColor="@color/white" />-->
 
             </GridLayout>
-
+            <ImageView
+                android:id="@+id/btn_take_again"
+                android:layout_width="match_parent"
+                android:layout_height="70dp"
+                android:layout_alignParentBottom="true"
+                android:layout_marginTop="60dp"
+                android:src="@drawable/btn_take_again"/>
         </LinearLayout>
 
     </RelativeLayout>

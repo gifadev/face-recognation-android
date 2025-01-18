@@ -107,6 +107,8 @@ dependencies {
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     implementation ("com.google.code.gson:gson:2.8.9")
+//    implementation ("com.github.bumptech.glide:glide:4.12.0")
+//    implementation ("jp.wasabeef:glide-transformations:4.3.0")
 
 //    implementation ("com.google.mlkit:face-detection:16.1.7")
 

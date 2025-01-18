@@ -107,6 +107,6 @@ class FloatingCameraService : Service() {
 
     // Implementasi metode onBind
     override fun onBind(intent: Intent?): IBinder? {
-        return null // Karena kita tidak menggunakan binding service
+        return null
     }
 }

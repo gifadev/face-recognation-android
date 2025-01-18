@@ -11,9 +11,14 @@ interface ApiRest {
 //    fun getData(): Call<ArrayList<Kategori>>
 
     @Multipart
-    @POST("/search")
-    fun sendPicture(
+    @POST("search/")  // Untuk versi 1
+    fun sendPictureV1(
         @Part photo: MultipartBody.Part?
     ): Call<JsonObject?>?
 
+    @Multipart
+    @POST("analyze/")  // Untuk versi 2
+    fun sendPictureV2(
+        @Part photo: MultipartBody.Part?
+    ): Call<JsonObject?>?
 }
