@@ -50,7 +50,9 @@ import java.util.Locale
 import android.provider.Settings
 import android.util.Base64
 import android.view.Surface
-
+import android.widget.TextView
+import android.os.Handler
+import android.os.Looper
 
 
 class MainActivity : AppCompatActivity() {
@@ -63,6 +65,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var context: Context
     var filePhoto : File? = null
     var taken = false
+    private lateinit var tvStatus: TextView
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -81,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.main_activity)
 
         previewView = findViewById(R.id.previewView)
+        freezeFrame = findViewById(R.id.freezeFrame)
         val floatingButton: ImageView = findViewById(R.id.floating)
         val toggleButton: ImageView = findViewById(R.id.toggleCameraButton)
         val captureButton: ImageView = findViewById(R.id.captureButton)
@@ -88,6 +92,7 @@ class MainActivity : AppCompatActivity() {
         val settingButton: ImageView = findViewById(R.id.setting)
         faceNotFound = findViewById(R.id.not_found)
         loading = findViewById(R.id.loading)
+        tvStatus = findViewById(R.id.tvStatus)
 
         context = this@MainActivity
 
@@ -264,8 +269,12 @@ class MainActivity : AppCompatActivity() {
         startCamera()  // Restart camera with the new camera selector
     }
 
+    private lateinit var freezeFrame: ImageView
+
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
+
+
         val photoFile = File(
             externalCacheDir,
             SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
@@ -282,21 +291,21 @@ class MainActivity : AppCompatActivity() {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     Log.d("CameraX", "Photo saved at ${photoFile.absolutePath}")
                     processImage(photoFile)
+
                     taken = false
-//                    taken = true
-//                    sendData() // Send photo immediately after saving
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
+
                     taken = false
                 }
             }
         )
     }
 
+
     private fun processImage(photoFile: File) {
-        loading.visibility = View.VISIBLE
         val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
 
         // Resize the image if it's too large
@@ -308,55 +317,6 @@ class MainActivity : AppCompatActivity() {
                 .build()
         )
         sendData()
-
-//        val image = InputImage.fromBitmap(resizedBitmap, 0)
-//        faceDetector.process(image)
-//            .addOnSuccessListener { faces ->
-//                if (faces.isNotEmpty()) {
-//                    loading.visibility = View.GONE
-//                    val face = faces[0]
-//                    val faceRect = face.boundingBox
-//
-//                    // Calculate crop rectangle and crop the image
-//                    val marginTop = (faceRect.height() * 0.1).toInt()
-//                    val marginBottom = (faceRect.height() * 0.3).toInt()
-//
-//                    val width = faceRect.width()
-//                    val height = faceRect.height() + marginTop + marginBottom
-//                    val sideLength = maxOf(width, height)
-//
-//                    val centerX = faceRect.centerX()
-//                    val centerY = faceRect.centerY() + (marginTop - marginBottom) / 2
-//
-//                    val left = (centerX - sideLength / 2).coerceAtLeast(0)
-//                    val top = (centerY - sideLength / 2).coerceAtLeast(0)
-//                    val right = (centerX + sideLength / 2).coerceAtMost(resizedBitmap.width)
-//                    val bottom = (centerY + sideLength / 2).coerceAtMost(resizedBitmap.height)
-//
-//                    val cropRect = Rect(left, top, right, bottom)
-//
-//                    val croppedBitmap = Bitmap.createBitmap(
-//                        resizedBitmap, cropRect.left, cropRect.top, cropRect.width(), cropRect.height()
-//                    )
-//
-//                    val croppedFile = File(
-//                        externalMediaDirs.firstOrNull(),
-//                        SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US).format(System.currentTimeMillis()) + ".jpg"
-//                    )
-//                    saveCroppedImage(croppedBitmap, croppedFile)
-//
-//                    // Send cropped image to server
-//                    extracted()
-//                    sendData()  // Upload the cropped image
-//                } else {
-//                    faceNotFound.visibility = View.VISIBLE
-//                    loading.visibility = View.GONE
-//                }
-//            }
-//            .addOnFailureListener { e ->
-//                Log.e("FaceDetection", "Face detection failed", e)
-//                loading.visibility = View.GONE
-//            }
     }
 
     private fun extracted() {
@@ -437,8 +397,51 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Fungsi untuk mengonversi base64 ke Bitmap
+    private fun base64ToBitmap(base64String: String): Bitmap? {
+        return try {
+            val decodedBytes = Base64.decode(base64String, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun formatDate(dateString: String): String {
+        return try {
+            // Pastikan string memiliki panjang 8 karakter (YYYYMMDD)
+            if (dateString.length == 8) {
+                val year = dateString.substring(0, 4)
+                val month = dateString.substring(4, 6)
+                val day = dateString.substring(6, 8)
+                "$year-$month-$day" // Format menjadi YYYY-MM-DD
+            } else {
+                dateString // Jika format tidak sesuai, kembalikan string asli
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            dateString // Jika terjadi error, kembalikan string asli
+        }
+    }
+
+    private fun formatGender(genderCode: String): String {
+        return when (genderCode) {
+            "M" -> "Male"
+            "F" -> "Female"
+            else -> genderCode // Jika tidak sesuai, kembalikan nilai asli
+        }
+    }
+
     private fun sendData() {
         loading.visibility = View.VISIBLE
+        tvStatus.visibility = View.VISIBLE
+        tvStatus.text = "Searching..."
+        // menampilkan kamera freeze
+        previewView.bitmap?.let {
+            freezeFrame.setImageBitmap(it)
+            freezeFrame.visibility = View.VISIBLE
+        }
         var image: MultipartBody.Part? = null
         var mFile: RequestBody? = null
 
@@ -446,6 +449,8 @@ class MainActivity : AppCompatActivity() {
         if (filePhoto == null) {
             Toast.makeText(context, "Silahkan Upload Foto", Toast.LENGTH_SHORT).show()
             loading.visibility = View.GONE
+            // Hilangkan  freeze
+            freezeFrame.visibility = View.GONE
             return
         }
 
@@ -458,11 +463,9 @@ class MainActivity : AppCompatActivity() {
 
         // Cek versi API yang digunakan
         if (sharedPref.getString("API_VERSION", "v2") == "v1") {
-            // API V1: Gunakan field "image"
             image = MultipartBody.Part.createFormData("image", filePhoto!!.name, mFile)
             mApiRest.sendPictureV1(image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
-                    loading.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
@@ -470,11 +473,11 @@ class MainActivity : AppCompatActivity() {
                             val message = jsonResponse.getString("message")
 
                             when (status) {
+
                                 "success" -> {
                                     val data = jsonResponse.optJSONObject("data")
                                     if (data != null) {
                                         val intent = when (data.optString("status")) {
-                                            "No faces detected in the image" -> Intent(context, AlertFaceNotDetectedActivity::class.java)
                                             else -> Intent(context, ResultActivity::class.java).apply {
                                                 putExtra("image_url", data.getString("image_url"))
                                                 putExtra("full_name", data.getString("full_name"))
@@ -489,28 +492,18 @@ class MainActivity : AppCompatActivity() {
                                                 putExtra("score", data.getString("score"))
                                             }
                                         }
-                                        startActivity(intent)
-                                    } else {
-                                        Toast.makeText(context, "Data tidak ditemukan.", Toast.LENGTH_SHORT).show()
+                                        tvStatus.visibility = View.VISIBLE
+                                        tvStatus.text = "Identifying..."
+                                        Handler(Looper.getMainLooper()).postDelayed({
+                                            // Menunggu selama 2 detik sebelum memulai Activity
+                                            startActivity(intent)
+                                            loading.visibility = View.GONE
+                                            tvStatus.visibility = View.GONE
+                                            freezeFrame.visibility = View.GONE
+                                        }, 2000)
                                     }
                                 }
-                                "error" -> {
-                                    when (message) {
-                                        "No faces detected in the image" -> {
-                                            Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
-                                            val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                            startActivity(intent)
-                                        }
-                                        "No matching identity found" -> {
-                                            Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
-                                            val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                            startActivity(intent)
-                                        }
-                                        else -> {
-                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
+
                                 else -> {
                                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                 }
@@ -535,12 +528,28 @@ class MainActivity : AppCompatActivity() {
                                             "No faces detected in the image" -> {
                                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                                startActivity(intent)
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
+                                                    startActivity(intent)
+                                                }, 2000)
                                             }
                                             "No matching identity found" -> {
                                                 Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
                                                 val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                                startActivity(intent)
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
+                                                    startActivity(intent)
+                                                }, 2000)
                                             }
                                             else -> {
                                                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -573,7 +582,6 @@ class MainActivity : AppCompatActivity() {
             image = MultipartBody.Part.createFormData("file", filePhoto!!.name, mFile)
             mApiRest.sendPictureV2(image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
-                    loading.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
@@ -657,15 +665,30 @@ class MainActivity : AppCompatActivity() {
                                     else -> {
                                         Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
                                         val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                        startActivity(intent)
-//                                        Toast.makeText(context, "Status tidak dikenali: $status", Toast.LENGTH_SHORT).show()
+                                        tvStatus.visibility = View.VISIBLE
+                                        tvStatus.text = "Identifying..."
+                                        Handler(Looper.getMainLooper()).postDelayed({
+                                            // Menunggu selama 2 detik sebelum memulai Activity
+                                            loading.visibility = View.GONE
+                                            tvStatus.visibility = View.GONE
+                                            freezeFrame.visibility = View.GONE
+                                            startActivity(intent)
+                                        }, 2000)
+//
                                     }
                                 }
                             } else {
                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                startActivity(intent)
-                                Toast.makeText(context, "Field 'status' tidak ditemukan.", Toast.LENGTH_SHORT).show()
+                                tvStatus.visibility = View.VISIBLE
+                                tvStatus.text = "Identifying..."
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                    loading.visibility = View.GONE
+                                    tvStatus.visibility = View.GONE
+                                    freezeFrame.visibility = View.GONE
+                                    startActivity(intent)
+                                }, 2000)
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
@@ -688,44 +711,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Fungsi untuk mengonversi base64 ke Bitmap
-    private fun base64ToBitmap(base64String: String): Bitmap? {
-        return try {
-            val decodedBytes = Base64.decode(base64String, Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    private fun formatDate(dateString: String): String {
-        return try {
-            // Pastikan string memiliki panjang 8 karakter (YYYYMMDD)
-            if (dateString.length == 8) {
-                val year = dateString.substring(0, 4)
-                val month = dateString.substring(4, 6)
-                val day = dateString.substring(6, 8)
-                "$year-$month-$day" // Format menjadi YYYY-MM-DD
-            } else {
-                dateString // Jika format tidak sesuai, kembalikan string asli
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            dateString // Jika terjadi error, kembalikan string asli
-        }
-    }
-
-    private fun formatGender(genderCode: String): String {
-        return when (genderCode) {
-            "M" -> "Male"
-            "F" -> "Female"
-            else -> genderCode // Jika tidak sesuai, kembalikan nilai asli
-        }
-    }
-
     private fun sendDataFromGalery() {
         loading.visibility = View.VISIBLE
+        tvStatus.visibility = View.VISIBLE
+        tvStatus.text = "Searching..."
+        // menampilkan kamera freeze
+        previewView.bitmap?.let {
+            freezeFrame.setImageBitmap(it)
+            freezeFrame.visibility = View.VISIBLE
+        }
         var image: MultipartBody.Part? = null
         var file: File? = null
         var mFile: RequestBody? = null
@@ -751,7 +745,6 @@ class MainActivity : AppCompatActivity() {
             image = MultipartBody.Part.createFormData("image", file.name, mFile)
             mApiRest.sendPictureV1(image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
-                    loading.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
@@ -778,28 +771,18 @@ class MainActivity : AppCompatActivity() {
                                                 putExtra("score", data.getString("score"))
                                             }
                                         }
-                                        startActivity(intent)
-                                    } else {
-                                        Toast.makeText(context, "Data tidak ditemukan.", Toast.LENGTH_SHORT).show()
+                                        tvStatus.visibility = View.VISIBLE
+                                        tvStatus.text = "Identifying..."
+                                        Handler(Looper.getMainLooper()).postDelayed({
+                                            // Menunggu selama 2 detik sebelum memulai Activity
+                                            startActivity(intent)
+                                            loading.visibility = View.GONE
+                                            tvStatus.visibility = View.GONE
+                                            freezeFrame.visibility = View.GONE
+                                        }, 2000)
                                     }
                                 }
-                                "error" -> {
-                                    when (message) {
-                                        "No faces detected in the image" -> {
-                                            Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
-                                            val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                            startActivity(intent)
-                                        }
-                                        "No matching identity found" -> {
-                                            Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
-                                            val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                            startActivity(intent)
-                                        }
-                                        else -> {
-                                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
+
                                 else -> {
                                     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                 }
@@ -823,12 +806,28 @@ class MainActivity : AppCompatActivity() {
                                             "No faces detected in the image" -> {
                                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                                startActivity(intent)
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                                    startActivity(intent)
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
+                                                }, 2000)
                                             }
                                             "No matching identity found" -> {
                                                 Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
                                                 val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                                startActivity(intent)
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                                    startActivity(intent)
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
+                                                }, 2000)
                                             }
                                             else -> {
                                                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -861,7 +860,6 @@ class MainActivity : AppCompatActivity() {
             image = MultipartBody.Part.createFormData("file", filePhoto!!.name, mFile)
             mApiRest.sendPictureV2(image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
-                    loading.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
@@ -943,13 +941,32 @@ class MainActivity : AppCompatActivity() {
                                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     else -> {
-                                        Toast.makeText(context, "Status tidak dikenali: $status", Toast.LENGTH_SHORT).show()
+                                        Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
+                                        val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                        tvStatus.visibility = View.VISIBLE
+                                        tvStatus.text = "Identifying..."
+                                        Handler(Looper.getMainLooper()).postDelayed({
+                                            // Menunggu selama 2 detik sebelum memulai Activity
+                                            loading.visibility = View.GONE
+                                            tvStatus.visibility = View.GONE
+                                            freezeFrame.visibility = View.GONE
+                                            startActivity(intent)
+                                        }, 2000)
+//
                                     }
                                 }
                             } else {
                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                startActivity(intent)
+                                tvStatus.visibility = View.VISIBLE
+                                tvStatus.text = "Identifying..."
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    // Menunggu selama 2 detik sebelum memulai Activity
+                                    loading.visibility = View.GONE
+                                    tvStatus.visibility = View.GONE
+                                    freezeFrame.visibility = View.GONE
+                                    startActivity(intent)
+                                }, 2000)
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()

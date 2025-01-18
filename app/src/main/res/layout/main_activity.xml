@@ -46,6 +46,12 @@
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"/>
 
+                        <ImageView
+                            android:id="@+id/freezeFrame"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="centerCrop"
+                            android:visibility="gone" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -178,41 +184,50 @@
     <RelativeLayout
         android:id="@+id/loading"
         android:layout_width="match_parent"
-        android:visibility="gone"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:visibility="gone">
 
+        <!-- Background Transparan -->
         <View
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#AA000000" />
 
-        <com.airbnb.lottie.LottieAnimationView
-            android:id="@+id/lottieAnimation"
-            android:layout_width="match_parent"
+        <!-- Animasi Loading dan Teks -->
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:layout_gravity="end"
-            android:paddingHorizontal="50dp"
-            android:paddingBottom="100dp"
-            android:layout_marginBottom="50dp"
-            app:lottie_rawRes="@raw/animation"
-            app:lottie_speed="2"
-            app:lottie_autoPlay="true"
-            app:lottie_loop="true"/>
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_centerInParent="true">
 
-<!--        &lt;!&ndash; Teks Request is being processed &ndash;&gt;-->
-<!--        <TextView-->
-<!--            android:id="@+id/loadingText"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:text="Request is being processed"-->
-<!--            android:textColor="#FFFFFF"-->
-<!--            android:textSize="16sp"-->
-<!--            android:layout_below="@id/lottieAnimation"-->
-<!--            android:layout_centerHorizontal="true"-->
-<!--            android:layout_marginTop="20dp"/>-->
+            <!-- Animasi Loading -->
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/lottieAnimation"
+                android:layout_width="250dp"
+                android:layout_height="250dp"
+                app:lottie_rawRes="@raw/animation"
+                app:lottie_speed="2"
+                app:lottie_autoPlay="true"
+                app:lottie_loop="true"
+                android:layout_marginBottom="-10dp" />
+
+            <!-- Teks "Searching..." -->
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Searching..."
+                android:textColor="#FFFFFF"
+                android:textSize="25sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:layout_marginTop="0dp" />
+        </LinearLayout>
 
     </RelativeLayout>
+
+
 
 
     <RelativeLayout
