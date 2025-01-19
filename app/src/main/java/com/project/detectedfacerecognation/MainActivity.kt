@@ -53,11 +53,18 @@ import android.view.Surface
 import android.widget.TextView
 import android.os.Handler
 import android.os.Looper
+import android.hardware.camera2.*
+import android.util.Size
+import android.view.TextureView
+import android.graphics.SurfaceTexture
+import android.graphics.Matrix
+import android.os.Environment
+
 
 
 class MainActivity : AppCompatActivity() {
     var GET_FROM_GALLERY: Int = 141
-    private var cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
     private var imageCapture: ImageCapture? = null
     private lateinit var loading: RelativeLayout
     private lateinit var faceNotFound: RelativeLayout
@@ -66,12 +73,22 @@ class MainActivity : AppCompatActivity() {
     var filePhoto : File? = null
     var taken = false
     private lateinit var tvStatus: TextView
+    private lateinit var textureView: TextureView
+    private lateinit var cameraManager: CameraManager
+    private var cameraDevice: CameraDevice? = null
+    private var captureRequestBuilder: CaptureRequest.Builder? = null
+    private var captureSession: CameraCaptureSession? = null
+    private lateinit var previewSize: Size
+    private val TAG = "Camera2Mirror"
+    private var isSessionActive = false
+    private var isCapturing = false
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            startCamera()
+//            startCamera()
+            openFrontCamera()
         } else {
             // Handle permission denial
         }
@@ -85,18 +102,38 @@ class MainActivity : AppCompatActivity() {
 
         previewView = findViewById(R.id.previewView)
         freezeFrame = findViewById(R.id.freezeFrame)
+        freezeFrame.visibility = View.GONE
         val floatingButton: ImageView = findViewById(R.id.floating)
-        val toggleButton: ImageView = findViewById(R.id.toggleCameraButton)
+//        val toggleButton: ImageView = findViewById(R.id.toggleCameraButton)
+//        setButtonEffect(toggleButton)
+//        toggleButton.setOnClickListener {
+//            toggleCamera()
+//        }
         val captureButton: ImageView = findViewById(R.id.captureButton)
         val uploadButton: ImageView = findViewById(R.id.uploadButton)
         val settingButton: ImageView = findViewById(R.id.setting)
         faceNotFound = findViewById(R.id.not_found)
         loading = findViewById(R.id.loading)
         tvStatus = findViewById(R.id.tvStatus)
+        cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+        previewView = findViewById(R.id.previewView)
+        textureView = findViewById(R.id.textureView)
+        cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
+
+        textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                openFrontCamera()
+            }
+
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean = true
+        }
 
         context = this@MainActivity
 
-        setButtonEffect(toggleButton)
+//        updateCameraButtonIcon()
+//        setButtonEffect(toggleButton)
         setButtonEffect(captureButton)
         setButtonEffect(uploadButton)
 
@@ -126,24 +163,44 @@ class MainActivity : AppCompatActivity() {
                 android.Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            startCamera()
+//            startCamera()
+            openFrontCamera()
+
         } else {
             requestPermissionLauncher.launch(android.Manifest.permission.CAMERA)
         }
 
-        toggleButton.setOnClickListener {
-            toggleCamera()
-        }
+//        toggleButton.setOnClickListener {
+//            toggleCamera()
+//        }
 
         // Capture photo when capture button is clicked
         captureButton.setOnClickListener {
             if (!taken) {
-                takePhoto()  // Ambil foto
-                taken = true  // Tandai foto sudah diambil
+                if (isCapturing) return@setOnClickListener
+
+                isCapturing = true
+                captureFreezeFrame() // Ambil dan tampilkan freeze frame
+                val bitmap = textureView.bitmap
+                if (bitmap != null) {
+                    try {
+                        savePhoto(bitmap)
+                        taken = true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error saving photo", e)
+                        Toast.makeText(this, "Gagal menyimpan foto", Toast.LENGTH_SHORT).show()
+                    } finally {
+                        isCapturing = false
+                    }
+                } else {
+                    isCapturing = false
+                    Toast.makeText(this, "Gagal mengambil foto", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 faceNotFound.visibility = View.GONE
-                startCamera()  // Restart kamera jika sudah diambil
-                taken = false  // Reset flag untuk pengambilan foto berikutnya
+                taken = false
+                cleanupCamera()
+                openFrontCamera()
             }
         }
 
@@ -166,9 +223,238 @@ class MainActivity : AppCompatActivity() {
 
         faceNotFound.setOnClickListener {
             faceNotFound.visibility = View.GONE // Sembunyikan notifikasi
-            startCamera() // Mulai ulang kamera
+//            startCamera()
+            openFrontCamera()
             taken = false // Reset status pengambilan foto
         }
+    }
+
+    private fun captureFreezeFrame() {
+        stopPreview() // Hentikan preview kamera
+        previewView.bitmap?.let {
+            freezeFrame.setImageBitmap(it)
+            freezeFrame.visibility = View.VISIBLE
+        } ?: run {
+            Log.e(TAG, "PreviewView bitmap is null")
+        }
+    }
+
+    private fun stopPreview() {
+        try {
+            captureSession?.stopRepeating()
+            captureSession?.abortCaptures()
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Failed to stop preview", e)
+        }
+    }
+
+    private fun cleanupCamera() {
+        try {
+            captureSession?.stopRepeating()
+            captureSession?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing capture session", e)
+        } finally {
+            captureSession = null
+        }
+
+        try {
+            cameraDevice?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing camera device", e)
+        } finally {
+            cameraDevice = null
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Pastikan langsung membuka kamera ketika activity resume
+        Handler(Looper.getMainLooper()).post {
+            cleanupCamera() // Bersihkan dulu resource yang mungkin masih ada
+            openFrontCamera() // Buka kamera baru
+            taken = false // Reset state
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        cleanupCamera()
+    }
+    private fun openFrontCamera() {
+        try {
+            for (cameraId in cameraManager.cameraIdList) {
+                val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                    val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                    val sizes = map?.getOutputSizes(SurfaceTexture::class.java)
+
+                    if (sizes != null) {
+                        previewSize = chooseOptimalSize(sizes, textureView.width, textureView.height)
+                    }
+
+                    cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                        override fun onOpened(camera: CameraDevice) {
+                            cameraDevice = camera
+                            startPreview()
+                            adjustAspectRatio(
+                                textureView.width,
+                                textureView.height,
+                                previewSize.width,
+                                previewSize.height
+                            )
+                            applyMirrorEffect()
+                        }
+
+                        override fun onDisconnected(camera: CameraDevice) {
+                            camera.close()
+                        }
+
+                        override fun onError(camera: CameraDevice, error: Int) {
+                            camera.close()
+                            cameraDevice = null
+                        }
+                    }, null)
+                    break
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open camera", e)
+        }
+    }
+
+
+
+    private fun startPreview() {
+        try {
+            val texture = textureView.surfaceTexture!!
+            texture.setDefaultBufferSize(previewSize.width, previewSize.height)
+            val surface = Surface(texture)
+
+            captureRequestBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+            captureRequestBuilder?.addTarget(surface)
+
+            cameraDevice?.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
+                override fun onConfigured(session: CameraCaptureSession) {
+                    captureSession = session
+                    try {
+                        captureRequestBuilder?.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+                        session.setRepeatingRequest(captureRequestBuilder!!.build(), null, null)
+                    } catch (e: CameraAccessException) {
+                        Log.e(TAG, "Failed to start camera preview", e)
+                    }
+                }
+
+                override fun onConfigureFailed(session: CameraCaptureSession) {
+                    Log.e(TAG, "Failed to configure camera session")
+                }
+            }, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting preview", e)
+        }
+    }
+
+    private fun safelyCloseSession() {
+        try {
+            if (isSessionActive) {
+                captureSession?.stopRepeating()
+                captureSession?.close()
+                isSessionActive = false
+            }
+        } catch (e: CameraAccessException) {
+            Log.e(TAG, "Error closing session", e)
+        } finally {
+            captureSession = null
+        }
+    }
+
+
+    private fun applyMirrorEffect() {
+        val matrix = Matrix()
+        val centerX = textureView.width / 2f
+        val centerY = textureView.height / 2f
+        matrix.postScale(-1f, 1f, centerX, centerY) // Terapkan efek mirror
+        textureView.setTransform(matrix)
+    }
+
+    private fun adjustAspectRatio(
+        viewWidth: Int,
+        viewHeight: Int,
+        previewWidth: Int,
+        previewHeight: Int,
+        maxWidth: Int = 1300,
+        maxHeight: Int = 1920,
+        minWidth: Int = 1080,
+        minHeight: Int = 1400
+    ) {
+        val aspectRatio: Float = if (previewWidth > previewHeight) {
+            previewWidth.toFloat() / previewHeight
+        } else {
+            previewHeight.toFloat() / previewWidth
+        }
+
+        val scaledWidth: Int
+        val scaledHeight: Int
+
+        if (viewWidth > viewHeight * aspectRatio) {
+            scaledWidth = (viewHeight * aspectRatio).toInt()
+            scaledHeight = viewHeight
+        } else {
+            scaledWidth = viewWidth
+            scaledHeight = (viewWidth / aspectRatio).toInt()
+        }
+
+        val finalWidth = scaledWidth.coerceIn(minWidth, maxWidth)
+        val finalHeight = scaledHeight.coerceIn(minHeight, maxHeight)
+
+        val layoutParams = textureView.layoutParams
+        layoutParams.width = finalWidth
+        layoutParams.height = finalHeight
+        textureView.layoutParams = layoutParams
+    }
+
+    private fun savePhoto(bitmap: Bitmap) {
+        val photoFile = File(
+            externalCacheDir,
+            SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
+                .format(System.currentTimeMillis()) + ".jpg"
+        )
+
+        filePhoto = photoFile
+
+        try {
+            FileOutputStream(photoFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            processImage(photoFile)
+        } catch (e: IOException) {
+            Log.e(TAG, "Error saving photo", e)
+            throw e
+        }
+    }
+
+
+
+    private fun chooseOptimalSize(choices: Array<Size>, width: Int, height: Int): Size {
+        val aspectRatio = width.toFloat() / height
+        return choices.minByOrNull { size ->
+            Math.abs(size.width.toFloat() / size.height - aspectRatio)
+        } ?: choices[0]
+    }
+
+    private fun closeCamera() {
+        captureSession?.close()
+        captureSession = null
+        cameraDevice?.close()
+        cameraDevice = null
+    }
+
+
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraDevice?.close()
     }
 
     private fun requestPermissions() {
@@ -230,44 +516,69 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
+//    private fun updateCameraButtonIcon() {
+//        val toggleButton: ImageView = findViewById(R.id.toggleCameraButton)
+//        if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+//            toggleButton.setImageResource(R.drawable.front_camera2)
+//        } else {
+//            toggleButton.setImageResource(R.drawable.back_camera2)
+//        }
+//    }
 
-            // Set up preview use case
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
+//    private fun startCamera() {
+//        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+//
+//        cameraProviderFuture.addListener({
+//            val cameraProvider = cameraProviderFuture.get()
+//
+//            // Set up preview use case
+//            val preview = Preview.Builder().build().also {
+//                it.setSurfaceProvider(previewView.surfaceProvider)
+//            }
+//
+//            // Set up image capture use case
+//            imageCapture = ImageCapture.Builder().build()
+//
+//            try {
+//                // Unbind all use cases before rebinding
+//                cameraProvider.unbindAll()
+//
+//                // Bind the camera to lifecycle, along with preview and image capture use cases
+//                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture)
+//
+//                // Apply mirror effect for the front camera
+//                if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+//                    previewView.post {
+//                        previewView.scaleX = -1f // Membalikkan preview secara horizontal
+//                    }
+//                }
+//
+//            } catch (exc: Exception) {
+//                Log.e("CameraPreview", "Use case binding failed", exc)
+//            }
+//        }, ContextCompat.getMainExecutor(this))
+//    }
 
-            // Set up image capture use case
-            imageCapture = ImageCapture.Builder().build()
-
-            try {
-                // Unbind all use cases before rebinding
-                cameraProvider.unbindAll()
-
-                // Bind the camera to lifecycle, along with preview and image capture use cases
-                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture)
-            } catch (exc: Exception) {
-                Log.e("CameraPreview", "Use case binding failed", exc)
-            }
-        }, ContextCompat.getMainExecutor(this))
-    }
 
     private fun startFloatingCamera() {
         val intent = Intent(this, FloatingCameraService::class.java)
         startService(intent)
     }
 
-    private fun toggleCamera() {
-        cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-            CameraSelector.DEFAULT_FRONT_CAMERA
-        } else {
-            CameraSelector.DEFAULT_BACK_CAMERA
-        }
-        startCamera()  // Restart camera with the new camera selector
-    }
+//    private fun toggleCamera() {
+//        // Toggle antara kamera depan dan belakang
+//        cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+//            CameraSelector.DEFAULT_FRONT_CAMERA
+//        } else {
+//            CameraSelector.DEFAULT_BACK_CAMERA
+//        }
+//
+//        // Perbarui ikon tombol sesuai kamera yang aktif
+//        updateCameraButtonIcon()
+//
+//        // Restart kamera dengan selector baru
+//        startCamera()
+//    }
 
     private lateinit var freezeFrame: ImageView
 
@@ -357,10 +668,6 @@ class MainActivity : AppCompatActivity() {
         outStream.close()
     }
 
-    override fun onResume() {
-        super.onResume()
-        startCamera()
-    }
 
     fun getImageUri(inContext: Context?, inImage: Bitmap?): Uri? {
         val bytes = ByteArrayOutputStream()

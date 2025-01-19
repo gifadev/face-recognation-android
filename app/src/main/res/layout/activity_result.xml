@@ -63,7 +63,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="739dp"
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:padding="70dp">
 
@@ -323,14 +323,18 @@
                 <!--                    android:textColor="@color/white" />-->
 
             </GridLayout>
-            <ImageView
-                android:id="@+id/btn_take_again"
-                android:layout_width="match_parent"
-                android:layout_height="70dp"
-                android:layout_alignParentBottom="true"
-                android:layout_marginTop="60dp"
-                android:src="@drawable/btn_take_again"/>
+
+
         </LinearLayout>
+
+        <ImageView
+            android:id="@+id/btn_take_again"
+            android:layout_width="300dp"
+            android:layout_height="70dp"
+            android:layout_marginTop="700dp"
+            android:src="@drawable/btn_take_again"
+            android:layout_centerHorizontal="true"
+        />
 
     </RelativeLayout>
 
