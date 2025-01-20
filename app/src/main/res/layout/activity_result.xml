@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -297,31 +297,30 @@
                     android:text="Unknown"
                     android:textColor="@color/white" />
 
-                <!-- Row 9 -->
-                <!--                <TextView-->
-                <!--                    android:layout_width="wrap_content"-->
-                <!--                    android:layout_height="wrap_content"-->
-                <!--                    android:text="Score"-->
-                <!--                    android:textColor="@color/white"-->
-                <!--                    android:layout_marginStart="5dp"-->
-                <!--                    android:textStyle="bold" />-->
+<!--                 Row 9-->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="Score"
+                    android:textColor="@color/white"
+                    android:textStyle="bold" />
 
-                <!--                <TextView-->
-                <!--                    android:layout_width="wrap_content"-->
-                <!--                    android:layout_height="wrap_content"-->
-                <!--                    android:text=":"-->
-                <!--                    android:gravity="center"-->
-                <!--                    android:layout_marginStart="5dp"-->
-                <!--                    android:textColor="@color/white"/>-->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:gravity="center"
+                    android:text=":"
+                    android:textColor="@color/white" />
 
-                <!--                <TextView-->
-                <!--                    android:id="@+id/tv_score"-->
-                <!--                    android:layout_width="wrap_content"-->
-                <!--                    android:layout_height="wrap_content"-->
-                <!--                    android:text="Unknown"-->
-                <!--                    android:layout_marginStart="5dp"-->
-                <!--                    android:textColor="@color/white" />-->
-
+                <TextView
+                    android:id="@+id/tv_score"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="Unknown"
+                    android:textColor="@color/white" />
             </GridLayout>
 
 
@@ -331,11 +330,11 @@
             android:id="@+id/btn_take_again"
             android:layout_width="300dp"
             android:layout_height="70dp"
-            android:layout_marginTop="700dp"
+            android:layout_marginTop="550dp"
             android:src="@drawable/btn_take_again"
             android:layout_centerHorizontal="true"
         />
 
     </RelativeLayout>
 
-</ScrollView>
+</RelativeLayout>

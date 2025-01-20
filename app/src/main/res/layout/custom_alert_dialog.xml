@@ -1,0 +1,54 @@
+<!-- res/layout/custom_alert_dialog_impostor.xml -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@drawable/alert_background"
+    android:gravity="center">
+
+    <!-- Judul Alert -->
+        <TextView
+        android:id="@+id/titleTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ALERT!"
+        android:textSize="24sp"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:paddingBottom="16dp" />
+
+            <!-- Pesan Alert -->
+        <TextView
+        android:id="@+id/messageTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Data could not be found"
+        android:textSize="18sp"
+        android:textColor="@android:color/white"
+        android:gravity="center"
+        android:paddingBottom="16dp" />
+
+            <!-- Pesan Tambahan -->
+        <TextView
+        android:id="@+id/additionalMessageTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="This person is an impostor"
+        android:textSize="16sp"
+        android:textColor="@android:color/white"
+        android:gravity="center"
+        android:paddingBottom="24dp" />
+
+            <!-- Tombol OK -->
+        <Button
+        android:id="@+id/okButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="OK"
+        android:textColor="@android:color/white"
+        android:background="@drawable/button_background"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="12dp" />
+    </LinearLayout>

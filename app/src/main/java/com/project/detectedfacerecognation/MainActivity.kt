@@ -58,7 +58,24 @@ import android.util.Size
 import android.view.TextureView
 import android.graphics.SurfaceTexture
 import android.graphics.Matrix
+import com.google.gson.Gson
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
+import retrofit2.http.POST
 import android.os.Environment
+import okhttp3.MediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Call as OkHttpCall
+import okhttp3.Callback as OkHttpCallback
+import okhttp3.Response as OkHttpResponse
+import java.io.InputStream
+import com.project.detectedfacerecognation.api.ApiRest.Base64Request
+import okio.Buffer
+import android.app.AlertDialog
+import android.view.LayoutInflater
+import android.widget.Button
 
 
 
@@ -188,13 +205,13 @@ class MainActivity : AppCompatActivity() {
                         taken = true
                     } catch (e: Exception) {
                         Log.e(TAG, "Error saving photo", e)
-                        Toast.makeText(this, "Gagal menyimpan foto", Toast.LENGTH_SHORT).show()
+//                        Toast.makeText(this, "Gagal menyimpan foto", Toast.LENGTH_SHORT).show()
                     } finally {
                         isCapturing = false
                     }
                 } else {
                     isCapturing = false
-                    Toast.makeText(this, "Gagal mengambil foto", Toast.LENGTH_SHORT).show()
+//                    Toast.makeText(this, "Gagal mengambil foto", Toast.LENGTH_SHORT).show()
                 }
             } else {
                 faceNotFound.visibility = View.GONE
@@ -355,20 +372,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun safelyCloseSession() {
-        try {
-            if (isSessionActive) {
-                captureSession?.stopRepeating()
-                captureSession?.close()
-                isSessionActive = false
-            }
-        } catch (e: CameraAccessException) {
-            Log.e(TAG, "Error closing session", e)
-        } finally {
-            captureSession = null
-        }
-    }
-
 
     private fun applyMirrorEffect() {
         val matrix = Matrix()
@@ -386,7 +389,7 @@ class MainActivity : AppCompatActivity() {
         maxWidth: Int = 1300,
         maxHeight: Int = 1920,
         minWidth: Int = 1080,
-        minHeight: Int = 1400
+        minHeight: Int = 1250
     ) {
         val aspectRatio: Float = if (previewWidth > previewHeight) {
             previewWidth.toFloat() / previewHeight
@@ -435,6 +438,37 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    fun showErrorAlert(context: Context, title: String, message: String, additionalMessage: String? = null, onDismiss: () -> Unit = {}) {
+        // Inflate custom layout
+        val inflater = LayoutInflater.from(context)
+        val dialogView = inflater.inflate(R.layout.custom_alert_dialog, null)
+
+        // Set judul, pesan, dan pesan tambahan
+        val titleTextView = dialogView.findViewById<TextView>(R.id.titleTextView)
+        val messageTextView = dialogView.findViewById<TextView>(R.id.messageTextView)
+        val additionalMessageTextView = dialogView.findViewById<TextView>(R.id.additionalMessageTextView)
+
+        titleTextView.text = title
+        messageTextView.text = message
+        additionalMessageTextView.text = additionalMessage ?: ""
+
+        // Buat AlertDialog
+        val alertDialogBuilder = AlertDialog.Builder(context)
+        alertDialogBuilder.setView(dialogView)
+        alertDialogBuilder.setCancelable(false)
+
+        // Tampilkan AlertDialog
+        val alertDialog = alertDialogBuilder.create()
+        alertDialog.show()
+
+        // Handle tombol OK
+        val okButton = dialogView.findViewById<Button>(R.id.okButton)
+        okButton.setOnClickListener {
+            alertDialog.dismiss()
+            onDismiss()
+        }
+    }
+
 
     private fun chooseOptimalSize(choices: Array<Size>, width: Int, height: Int): Size {
         val aspectRatio = width.toFloat() / height
@@ -442,14 +476,6 @@ class MainActivity : AppCompatActivity() {
             Math.abs(size.width.toFloat() / size.height - aspectRatio)
         } ?: choices[0]
     }
-
-    private fun closeCamera() {
-        captureSession?.close()
-        captureSession = null
-        cameraDevice?.close()
-        cameraDevice = null
-    }
-
 
 
     override fun onDestroy() {
@@ -474,8 +500,6 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == 100) {
             if (Settings.canDrawOverlays(this)) {
                 startFloatingCamera()
-            } else {
-                Toast.makeText(this, "Izin SYSTEM_ALERT_WINDOW diperlukan", Toast.LENGTH_SHORT).show()
             }
         }
         //Detects request codes
@@ -486,7 +510,6 @@ class MainActivity : AppCompatActivity() {
                 bitmap = MediaStore.Images.Media.getBitmap(contentResolver, selectedImage)
                 mPhotoUri = getImageUri(context, bitmap)
 
-//                JIKA API SUDAH ADA
                 sendDataFromGalery()
 
             } catch (e: FileNotFoundException) {
@@ -504,7 +527,6 @@ class MainActivity : AppCompatActivity() {
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> {
-                    // Kurangi alpha untuk memberikan efek redup
                     view.alpha = 0.5f
                 }
                 android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
@@ -714,6 +736,24 @@ class MainActivity : AppCompatActivity() {
             null
         }
     }
+    fun multipartToBase64(image: MultipartBody.Part): String? {
+        return try {
+            // Dapatkan RequestBody dari MultipartBody.Part
+            val requestBody: RequestBody = image.body
+
+            // Baca data dari RequestBody ke ByteArray menggunakan okio.Buffer
+            val buffer = Buffer()
+            requestBody.writeTo(buffer)
+            val fileContent = buffer.readByteArray()
+
+            // Konversi ByteArray ke Base64
+            Base64.encodeToString(fileContent, Base64.DEFAULT)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
 
     private fun formatDate(dateString: String): String {
         return try {
@@ -754,14 +794,14 @@ class MainActivity : AppCompatActivity() {
 
         // Pastikan filePhoto tidak null
         if (filePhoto == null) {
-            Toast.makeText(context, "Silahkan Upload Foto", Toast.LENGTH_SHORT).show()
+//            Toast.makeText(context, "Silahkan Upload Foto", Toast.LENGTH_SHORT).show()
             loading.visibility = View.GONE
             // Hilangkan  freeze
             freezeFrame.visibility = View.GONE
             return
         }
 
-        // Inisialisasi RequestBody dari filePhoto
+
         mFile = RequestBody.create("image/*".toMediaTypeOrNull(), filePhoto!!)
 
         // Inisialisasi ApiRest dan SharedPreferences
@@ -777,7 +817,6 @@ class MainActivity : AppCompatActivity() {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
                             val status = jsonResponse.getString("status")
-                            val message = jsonResponse.getString("message")
 
                             when (status) {
 
@@ -810,18 +849,13 @@ class MainActivity : AppCompatActivity() {
                                         }, 2000)
                                     }
                                 }
-
-                                else -> {
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                }
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
-                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
+//                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
                         }
                     }
                     else {
-                        // Handle non-successful responses (e.g., 400 Bad Request)
                         try {
                             val errorBody = response.errorBody()?.string()
                             if (!errorBody.isNullOrEmpty()) {
@@ -835,184 +869,217 @@ class MainActivity : AppCompatActivity() {
                                             "No faces detected in the image" -> {
                                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                                tvStatus.visibility = View.VISIBLE
-                                                tvStatus.text = "Identifying..."
-                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                                    loading.visibility = View.GONE
-                                                    tvStatus.visibility = View.GONE
-                                                    freezeFrame.visibility = View.GONE
-                                                    startActivity(intent)
-                                                }, 2000)
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                             "No matching identity found" -> {
                                                 Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
                                                 val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                                tvStatus.visibility = View.VISIBLE
-                                                tvStatus.text = "Identifying..."
-                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                                    loading.visibility = View.GONE
-                                                    tvStatus.visibility = View.GONE
-                                                    freezeFrame.visibility = View.GONE
-                                                    startActivity(intent)
-                                                }, 2000)
-                                            }
-                                            else -> {
-                                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                         }
                                     }
-                                    else -> {
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                    }
                                 }
-                            } else {
-                                Toast.makeText(context, "Gagal Upload Data", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
-                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
+//                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
 
                 override fun onFailure(call: Call<JsonObject?>, t: Throwable) {
                     loading.visibility = View.GONE
-                    Log.e("API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}")
-                    Toast.makeText(context, "Koneksi Error", Toast.LENGTH_SHORT).show()
+                    Log.e("API_ERROR", "connection error: ${t.message ?: "Unknown error"}")
+                    showErrorAlert(
+                        context = context, // Context dari activity atau fragment
+                        title = "400",
+                        message = "The server cannot process your request",
+                        onDismiss = {
+                            openFrontCamera()
+                        }
+                    )
+
                 }
             })
         }
         else {
-            // API V2: Gunakan field "file"
-            image = MultipartBody.Part.createFormData("file", filePhoto!!.name, mFile)
-            mApiRest.sendPictureV2(image)?.enqueue(object : Callback<JsonObject?> {
+            // API V2:
+            image = MultipartBody.Part.createFormData("img64", filePhoto!!.name, mFile)
+            val base64Image = multipartToBase64(image) ?: ""
+            Log.d("BASE64_IMAGE", "Base64 Image: $base64Image")
+            mApiRest.sendPictureV2(base64Image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
                             Log.d("API_RESPONSE", "Full Response: $jsonResponse") // Cetak respons lengkap
 
-                            // Pastikan field "status" ada
                             if (jsonResponse.has("status")) {
                                 val status = jsonResponse.getString("status")
                                 Log.d("API_RESPONSE", "Status: $status")
 
                                 when (status) {
                                     "success" -> {
-                                        // Pastikan field "response" ada
+                                        val gson = Gson()
+                                        val jsonObject: JsonObject = gson.fromJson(jsonResponse.toString(), JsonObject::class.java)
+
                                         if (jsonResponse.has("response")) {
                                             val responseObj = jsonResponse.getJSONObject("response")
+                                            Log.d("API_RESPONSE", "Response Object: $responseObj")
 
-                                            // Pastikan field "results" ada
-                                            if (responseObj.has("results")) {
-                                                val resultsArray = responseObj.getJSONArray("results")
-                                                Log.d("API_RESPONSE", "Results Array: $resultsArray")
+                                            if (responseObj.has("candidates")) {
+                                                val candidatesArray = responseObj.getJSONArray("candidates")
+                                                Log.d("API_RESPONSE", "Candidates Array: $candidatesArray")
 
-                                                if (resultsArray.length() > 0) {
-                                                    val firstResult = resultsArray.getJSONObject(0)
+                                                if (candidatesArray.length() > 0) {
+                                                    val firstCandidate = candidatesArray.getJSONObject(0)
+                                                    val facial = firstCandidate.getJSONObject("facial")
 
-                                                    // Pastikan field "demographics" ada
-                                                    if (firstResult.has("demographics")) {
-                                                        val demographics = firstResult.getJSONObject("demographics")
-                                                        Log.d("API_RESPONSE", "Demographics: $demographics")
+                                                    if (firstCandidate.has("demographics")) {
+                                                        if (facial.getString("similarity") == "IDENTICAL") {
+                                                            val demographics = firstCandidate.getJSONObject("demographics")
+                                                            Log.d("API_RESPONSE", "Demographics: $demographics")
 
-                                                        // Ekstrak data dari objek demographics
-                                                        val fullName = demographics.optString("fname", "N/A")
-                                                        val gender = formatGender(demographics.optString("gender", "N/A"))
-                                                        val birthDate = formatDate(demographics.optString("dob", "N/A"))
-                                                        val nationality = demographics.optString("nat", "N/A")
-                                                        val passportNumber = demographics.optString("nopaspor", "N/A")
+                                                            // Ekstrak data dari objek demographics
+                                                            val fullName = demographics.optString("fname", "N/A")
+                                                            val gender = formatGender(demographics.optString("gender", "N/A"))
+                                                            val birthDate = formatDate(demographics.optString("dob", "N/A"))
+                                                            val nationality = demographics.optString("nat", "N/A")
+                                                            val passportNumber = demographics.optString("nopaspor", "N/A")
 
-                                                        // Ekstrak data facial (gambar dan skor)
-                                                        val facial = firstResult.getJSONObject("facial")
-                                                        val score = facial.optInt("score", 0)
-                                                        val base64Image = facial.optString("img", "")
+                                                            if (firstCandidate.has("facial")) {
+                                                                val facial = firstCandidate.getJSONObject("facial")
+                                                                val score = facial.optString("score", "")
+                                                                val base64Image = facial.optString("img", "")
+                                                                val bitmap = base64ToBitmap(base64Image)
 
-                                                        // Konversi base64 ke Bitmap
-                                                        val bitmap = base64ToBitmap(base64Image)
+                                                                // Buat intent untuk membuka ResultActivity
+                                                                val intent = Intent(context, ResultActivity::class.java).apply {
+                                                                    putExtra("full_name", fullName)
+                                                                    putExtra("gender", gender)
+                                                                    putExtra("birth_date", birthDate)
+                                                                    putExtra("nationality", nationality)
+                                                                    putExtra("passport_number", passportNumber)
+                                                                    putExtra("score", score)
+                                                                    if (bitmap != null) {
+                                                                        // Simpan bitmap sebagai byte array
+                                                                        val stream = ByteArrayOutputStream()
+                                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                                                        val byteArray = stream.toByteArray()
+                                                                        putExtra("image_bitmap", byteArray)
+                                                                    }
+                                                                }
 
-                                                        // Buat intent untuk membuka ResultActivity
-                                                        val intent = Intent(context, ResultActivity::class.java).apply {
-                                                            putExtra("full_name", fullName)
-                                                            putExtra("gender", gender)
-                                                            putExtra("birth_date", birthDate)
-                                                            putExtra("nationality", nationality)
-                                                            putExtra("passport_number", passportNumber)
-                                                            putExtra("score", score) // Tambahkan skor ke intent
-                                                            if (bitmap != null) {
-                                                                // Simpan bitmap sebagai byte array
-                                                                val stream = ByteArrayOutputStream()
-                                                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                                                                val byteArray = stream.toByteArray()
-                                                                putExtra("image_bitmap", byteArray)
+                                                                //send to pvs
+                                                                val retrofit = Retrofit.Builder()
+                                                                    .baseUrl("http://157.245.200.237/")
+                                                                    .addConverterFactory(GsonConverterFactory.create())
+                                                                    .build()
+
+                                                                val apiService = retrofit.create(ApiRest::class.java)
+                                                                val call = apiService.sendBiometricData(jsonObject)
+
+                                                                call.enqueue(object : Callback<JsonObject> {
+                                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                                                                        if (response.isSuccessful) {
+                                                                            val responseBody = response.body()
+                                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
+                                                                        } else {
+                                                                            val errorBody = response.errorBody()?.string()
+                                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
+                                                                        }
+                                                                    }
+
+                                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
+                                                                    }
+                                                                })
+
+                                                                tvStatus.visibility = View.VISIBLE
+                                                                tvStatus.text = "Identifying..."
+                                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                                    startActivity(intent)
+                                                                    loading.visibility = View.GONE
+                                                                    tvStatus.visibility = View.GONE
+                                                                    freezeFrame.visibility = View.GONE
+                                                                }, 2000)
                                                             }
+                                                        }else{
+                                                            Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
+                                                            val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                                            loading.visibility = View.GONE
+                                                            tvStatus.visibility = View.GONE
+                                                            freezeFrame.visibility = View.GONE
+                                                            startActivity(intent)
                                                         }
-                                                        startActivity(intent)
-                                                    } else {
-                                                        Toast.makeText(context, "Field 'demographics' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } else {
                                                     Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
                                                     val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
                                                     startActivity(intent)
                                                 }
-                                            } else {
-                                                Toast.makeText(context, "Field 'results' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                             }
-                                        } else {
-                                            Toast.makeText(context, "Field 'response' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                     "error" -> {
                                         val message = jsonResponse.optString("message", "Terjadi kesalahan yang tidak diketahui.")
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     else -> {
                                         Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
                                         val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                        tvStatus.visibility = View.VISIBLE
-                                        tvStatus.text = "Identifying..."
-                                        Handler(Looper.getMainLooper()).postDelayed({
-                                            // Menunggu selama 2 detik sebelum memulai Activity
-                                            loading.visibility = View.GONE
-                                            tvStatus.visibility = View.GONE
-                                            freezeFrame.visibility = View.GONE
-                                            startActivity(intent)
-                                        }, 2000)
-//
+                                        loading.visibility = View.GONE
+                                        tvStatus.visibility = View.GONE
+                                        freezeFrame.visibility = View.GONE
+                                        startActivity(intent)
                                     }
                                 }
                             } else {
                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
-                                val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                tvStatus.visibility = View.VISIBLE
-                                tvStatus.text = "Identifying..."
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                    loading.visibility = View.GONE
-                                    tvStatus.visibility = View.GONE
-                                    freezeFrame.visibility = View.GONE
-                                    startActivity(intent)
-                                }, 2000)
+                                showErrorAlert(
+                                    context = context, // Context dari activity atau fragment
+                                    title = "400",
+                                    message = "The server cannot process your request",
+                                    onDismiss = {
+                                        openFrontCamera()
+                                    }
+                                )
+                                openFrontCamera()
+                                loading.visibility = View.GONE
+                                tvStatus.visibility = View.GONE
+                                freezeFrame.visibility = View.GONE
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
                             Log.e("API_RESPONSE", "Error parsing JSON: ${e.message}")
-                            Toast.makeText(context, "Error parsing response.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         val errorBody = response.errorBody()?.string()
                         Log.e("API_RESPONSE", "Error: ${response.code()}, $errorBody")
-                        Toast.makeText(context, "Terjadi kesalahan: ${response.code()}", Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 override fun onFailure(call: Call<JsonObject?>, t: Throwable) {
                     loading.visibility = View.GONE
                     Log.e("API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
-                    Toast.makeText(context, "Koneksi Error: ${t.message ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
+                    showErrorAlert(
+                        context = context, // Context dari activity atau fragment
+                        title = "400",
+                        message = "The server cannot process your request",
+                        onDismiss = {
+                            openFrontCamera()
+                        }
+                    )
+                    openFrontCamera()
                 }
             })
         }
@@ -1022,7 +1089,6 @@ class MainActivity : AppCompatActivity() {
         loading.visibility = View.VISIBLE
         tvStatus.visibility = View.VISIBLE
         tvStatus.text = "Searching..."
-        // menampilkan kamera freeze
         previewView.bitmap?.let {
             freezeFrame.setImageBitmap(it)
             freezeFrame.visibility = View.VISIBLE
@@ -1037,9 +1103,15 @@ class MainActivity : AppCompatActivity() {
             mFile = RequestBody.create("image/*".toMediaTypeOrNull(), file)
         }
 
-        // Pastikan file dan mFile tidak null sebelum digunakan
         if (file == null || mFile == null) {
-            Toast.makeText(context, "File tidak valid.", Toast.LENGTH_SHORT).show()
+            showErrorAlert(
+                context = context, // Context dari activity atau fragment
+                title = "Error",
+                message = "file not valid",
+                onDismiss = {
+                    openFrontCamera()
+                }
+            )
             loading.visibility = View.GONE
             return
         }
@@ -1081,7 +1153,6 @@ class MainActivity : AppCompatActivity() {
                                         tvStatus.visibility = View.VISIBLE
                                         tvStatus.text = "Identifying..."
                                         Handler(Looper.getMainLooper()).postDelayed({
-                                            // Menunggu selama 2 detik sebelum memulai Activity
                                             startActivity(intent)
                                             loading.visibility = View.GONE
                                             tvStatus.visibility = View.GONE
@@ -1091,15 +1162,13 @@ class MainActivity : AppCompatActivity() {
                                 }
 
                                 else -> {
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                 }
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
-                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        // Handle non-successful responses (e.g., 400 Bad Request)
                         try {
                             val errorBody = response.errorBody()?.string()
                             if (!errorBody.isNullOrEmpty()) {
@@ -1113,44 +1182,30 @@ class MainActivity : AppCompatActivity() {
                                             "No faces detected in the image" -> {
                                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                                 val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                                tvStatus.visibility = View.VISIBLE
-                                                tvStatus.text = "Identifying..."
-                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                                    startActivity(intent)
-                                                    loading.visibility = View.GONE
-                                                    tvStatus.visibility = View.GONE
-                                                    freezeFrame.visibility = View.GONE
-                                                }, 2000)
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                             "No matching identity found" -> {
                                                 Log.d("API_RESPONSE", "No matching identity found, redirecting to AlertDataNotFoundActivity")
                                                 val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                                tvStatus.visibility = View.VISIBLE
-                                                tvStatus.text = "Identifying..."
-                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                                    startActivity(intent)
-                                                    loading.visibility = View.GONE
-                                                    tvStatus.visibility = View.GONE
-                                                    freezeFrame.visibility = View.GONE
-                                                }, 2000)
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                             else -> {
-                                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
                                     else -> {
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                 }
-                            } else {
-                                Toast.makeText(context, "Gagal Upload Data", Toast.LENGTH_SHORT).show()
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
-                            Toast.makeText(context, "Terjadi kesalahan dalam memproses data.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -1158,139 +1213,181 @@ class MainActivity : AppCompatActivity() {
                 override fun onFailure(call: Call<JsonObject?>, t: Throwable) {
                     loading.visibility = View.GONE
                     Log.e("API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}")
-                    Toast.makeText(context, "Koneksi Error", Toast.LENGTH_SHORT).show()
+                    showErrorAlert(
+                        context = context, // Context dari activity atau fragment
+                        title = "400",
+                        message = "The server cannot process your request",
+                        onDismiss = {
+                            openFrontCamera()
+                        }
+                    )
+                    openFrontCamera()
                 }
             })
         }
         else {
             // API V2: Gunakan field "file"
             image = MultipartBody.Part.createFormData("file", filePhoto!!.name, mFile)
-            mApiRest.sendPictureV2(image)?.enqueue(object : Callback<JsonObject?> {
+            val base64Image = multipartToBase64(image) ?: ""
+            Log.d("BASE64_IMAGE", "Base64 Image: $base64Image")
+            mApiRest.sendPictureV2(base64Image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
                     if (response.isSuccessful && response.body() != null) {
                         try {
                             val jsonResponse = JSONObject(response.body().toString())
                             Log.d("API_RESPONSE", "Full Response: $jsonResponse") // Cetak respons lengkap
 
-                            // Pastikan field "status" ada
                             if (jsonResponse.has("status")) {
                                 val status = jsonResponse.getString("status")
                                 Log.d("API_RESPONSE", "Status: $status")
 
                                 when (status) {
                                     "success" -> {
-                                        // Pastikan field "response" ada
+                                        val gson = Gson()
+                                        val jsonObject: JsonObject = gson.fromJson(jsonResponse.toString(), JsonObject::class.java)
+
                                         if (jsonResponse.has("response")) {
                                             val responseObj = jsonResponse.getJSONObject("response")
+                                            Log.d("API_RESPONSE", "Response Object: $responseObj")
 
-                                            // Pastikan field "results" ada
-                                            if (responseObj.has("results")) {
-                                                val resultsArray = responseObj.getJSONArray("results")
-                                                Log.d("API_RESPONSE", "Results Array: $resultsArray")
+                                            if (responseObj.has("candidates")) {
+                                                val candidatesArray = responseObj.getJSONArray("candidates")
+                                                Log.d("API_RESPONSE", "Candidates Array: $candidatesArray")
 
-                                                if (resultsArray.length() > 0) {
-                                                    val firstResult = resultsArray.getJSONObject(0)
+                                                if (candidatesArray.length() > 0) {
+                                                    val firstCandidate = candidatesArray.getJSONObject(0)
+                                                    val facial = firstCandidate.getJSONObject("facial")
+                                                    if (firstCandidate.has("demographics")) {
+                                                        if (facial.getString("similarity") == "IDENTICAL") {
+                                                            val demographics = firstCandidate.getJSONObject("demographics")
+                                                            Log.d("API_RESPONSE", "Demographics: $demographics")
+                                                            // Ekstrak data dari objek demographics
+                                                            val fullName = demographics.optString("fname", "N/A")
+                                                            val gender = formatGender(demographics.optString("gender", "N/A"))
+                                                            val birthDate = formatDate(demographics.optString("dob", "N/A"))
+                                                            val nationality = demographics.optString("nat", "N/A")
+                                                            val passportNumber = demographics.optString("nopaspor", "N/A")
 
-                                                    // Pastikan field "demographics" ada
-                                                    if (firstResult.has("demographics")) {
-                                                        val demographics = firstResult.getJSONObject("demographics")
-                                                        Log.d("API_RESPONSE", "Demographics: $demographics")
+                                                            if (firstCandidate.has("facial")) {
+                                                                val facial = firstCandidate.getJSONObject("facial")
+                                                                val score = facial.optString("score", "")
+                                                                val base64Image = facial.optString("img", "")
 
-                                                        // Ekstrak data dari objek demographics
-                                                        val fullName = demographics.optString("fname", "N/A")
-                                                        val gender = formatGender(demographics.optString("gender", "N/A"))
-                                                        val birthDate = formatDate(demographics.optString("dob", "N/A"))
-                                                        val nationality = demographics.optString("nat", "N/A")
-                                                        val passportNumber = demographics.optString("nopaspor", "N/A")
+                                                                val bitmap = base64ToBitmap(base64Image)
 
-                                                        // Ekstrak data facial (gambar dan skor)
-                                                        val facial = firstResult.getJSONObject("facial")
-                                                        val score = facial.optInt("score", 0)
-                                                        val base64Image = facial.optString("img", "")
+                                                                val intent = Intent(context, ResultActivity::class.java).apply {
+                                                                    putExtra("full_name", fullName)
+                                                                    putExtra("gender", gender)
+                                                                    putExtra("birth_date", birthDate)
+                                                                    putExtra("nationality", nationality)
+                                                                    putExtra("passport_number", passportNumber)
+                                                                    putExtra("score", score)
+                                                                    if (bitmap != null) {
+                                                                        val stream = ByteArrayOutputStream()
+                                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                                                        val byteArray = stream.toByteArray()
+                                                                        putExtra("image_bitmap", byteArray)
+                                                                    }
+                                                                }
 
-                                                        // Konversi base64 ke Bitmap
-                                                        val bitmap = base64ToBitmap(base64Image)
+                                                                //send to pvs
+                                                                val retrofit = Retrofit.Builder()
+                                                                    .baseUrl("http://157.245.200.237/") // Base URL API biometric-data
+                                                                    .addConverterFactory(GsonConverterFactory.create())
+                                                                    .build()
 
-                                                        // Buat intent untuk membuka ResultActivity
-                                                        val intent = Intent(context, ResultActivity::class.java).apply {
-                                                            putExtra("full_name", fullName)
-                                                            putExtra("gender", gender)
-                                                            putExtra("birth_date", birthDate)
-                                                            putExtra("nationality", nationality)
-                                                            putExtra("passport_number", passportNumber)
-                                                            putExtra("score", score) // Tambahkan skor ke intent
-                                                            if (bitmap != null) {
-                                                                // Simpan bitmap sebagai byte array
-                                                                val stream = ByteArrayOutputStream()
-                                                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                                                                val byteArray = stream.toByteArray()
-                                                                putExtra("image_bitmap", byteArray)
+                                                                val apiService = retrofit.create(ApiRest::class.java)
+                                                                val call = apiService.sendBiometricData(jsonObject)
+                                                                call.enqueue(object : Callback<JsonObject> {
+                                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                                                                        if (response.isSuccessful) {
+                                                                            val responseBody = response.body()
+                                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
+                                                                        } else {
+                                                                            val errorBody = response.errorBody()?.string()
+                                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
+                                                                        }
+                                                                    }
+
+                                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
+                                                                    }
+                                                                })
+
+                                                                tvStatus.visibility = View.VISIBLE
+                                                                tvStatus.text = "Identifying..."
+                                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                                    startActivity(intent)
+                                                                    loading.visibility = View.GONE
+                                                                    tvStatus.visibility = View.GONE
+                                                                    freezeFrame.visibility = View.GONE
+                                                                }, 2000)
                                                             }
                                                         }
-                                                        startActivity(intent)
-                                                    } else {
-                                                        Toast.makeText(context, "Field 'demographics' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } else {
                                                     Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
                                                     val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                                    loading.visibility = View.GONE
+                                                    tvStatus.visibility = View.GONE
+                                                    freezeFrame.visibility = View.GONE
                                                     startActivity(intent)
                                                 }
-                                            } else {
-                                                Toast.makeText(context, "Field 'results' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                             }
-                                        } else {
-                                            Toast.makeText(context, "Field 'response' tidak ditemukan.", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                     "error" -> {
                                         val message = jsonResponse.optString("message", "Terjadi kesalahan yang tidak diketahui.")
-                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     else -> {
                                         Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
                                         val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                        tvStatus.visibility = View.VISIBLE
-                                        tvStatus.text = "Identifying..."
-                                        Handler(Looper.getMainLooper()).postDelayed({
-                                            // Menunggu selama 2 detik sebelum memulai Activity
-                                            loading.visibility = View.GONE
-                                            tvStatus.visibility = View.GONE
-                                            freezeFrame.visibility = View.GONE
-                                            startActivity(intent)
-                                        }, 2000)
-//
+                                        loading.visibility = View.GONE
+                                        tvStatus.visibility = View.GONE
+                                        freezeFrame.visibility = View.GONE
+                                        startActivity(intent)
                                     }
                                 }
                             } else {
                                 Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
-                                val intent = Intent(context, AlertFaceNotDetectedActivity::class.java)
-                                tvStatus.visibility = View.VISIBLE
-                                tvStatus.text = "Identifying..."
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    // Menunggu selama 2 detik sebelum memulai Activity
-                                    loading.visibility = View.GONE
-                                    tvStatus.visibility = View.GONE
-                                    freezeFrame.visibility = View.GONE
-                                    startActivity(intent)
-                                }, 2000)
+                                showErrorAlert(
+                                    context = context, // Context dari activity atau fragment
+                                    title = "400",
+                                    message = "The server cannot process your request",
+                                    onDismiss = {
+                                        openFrontCamera()
+                                    }
+                                )
+
+                                loading.visibility = View.GONE
+                                tvStatus.visibility = View.GONE
+                                freezeFrame.visibility = View.GONE
+                                openFrontCamera()
+
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
                             Log.e("API_RESPONSE", "Error parsing JSON: ${e.message}")
-                            Toast.makeText(context, "Error parsing response.", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         val errorBody = response.errorBody()?.string()
                         Log.e("API_RESPONSE", "Error: ${response.code()}, $errorBody")
-                        Toast.makeText(context, "Terjadi kesalahan: ${response.code()}", Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 override fun onFailure(call: Call<JsonObject?>, t: Throwable) {
                     loading.visibility = View.GONE
                     Log.e("API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
-                    Toast.makeText(context, "Koneksi Error: ${t.message ?: "Unknown error"}", Toast.LENGTH_SHORT).show()
+                    showErrorAlert(
+                        context = context,
+                        title = "400",
+                        message = "The server cannot process your request",
+                        onDismiss = {
+                            openFrontCamera()
+                        }
+                    )
+                    openFrontCamera()
                 }
             })
         }

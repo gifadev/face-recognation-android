@@ -1,0 +1,5 @@
+<!-- res/drawable/alert_background_impostor.xml -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#2196F3" /> <!-- Warna merah -->
+    <corners android:radius="16dp" /> <!-- Sudut melengkung -->
+</shape>

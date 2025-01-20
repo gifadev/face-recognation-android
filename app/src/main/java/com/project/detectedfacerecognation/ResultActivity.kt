@@ -47,7 +47,7 @@ class ResultActivity : AppCompatActivity() {
         val tvGender: TextView = findViewById(R.id.tv_gender)
         val tvNationalid: TextView = findViewById(R.id.tv_nationalid)
         val tvMarital: TextView = findViewById(R.id.tv_marital)
-//        val tvScore: TextView = findViewById(R.id.tv_score)
+        val tvScore: TextView = findViewById(R.id.tv_score)
 
         // Ambil data dari intent
         val imgFace = intent.getStringExtra("image_url") // Untuk API V1
@@ -61,7 +61,7 @@ class ResultActivity : AppCompatActivity() {
         val gender = intent.getStringExtra("gender")
         val nationalid = intent.getStringExtra("national_id_number")
         val marital = intent.getStringExtra("marital_status")
-//        val score = intent.getStringExtra("score")
+        val score = intent.getStringExtra("score")
 
         // Set data ke TextView
         tvName.text = name ?: "Unknown"
@@ -73,7 +73,7 @@ class ResultActivity : AppCompatActivity() {
         tvGender.text = gender ?: "Unknown"
         tvNationalid.text = nationalid ?: "Unknown"
         tvMarital.text = marital ?: "Unknown"
-//        tvScore.text = score ?: "N/A"
+        tvScore.text = score ?: "N/A"
 
         // Tampilkan gambar
         if (!imgFace.isNullOrEmpty()) {
