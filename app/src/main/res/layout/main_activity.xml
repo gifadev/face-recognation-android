@@ -136,12 +136,13 @@
 
 
                     <androidx.cardview.widget.CardView
+                        android:id="@+id/floatingContainer"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:layout_alignParentStart="true"
                         android:layout_alignParentBottom="true"
                         android:layout_margin="15dp"
-                        app:cardCornerRadius="25dp">
+                        app:cardCornerRadius="20dp">  <!-- Radius setengah dari width/height untuk membuat bulat sempurna -->
 
                         <ImageView
                             android:id="@+id/floating"
@@ -149,6 +150,24 @@
                             android:layout_height="match_parent"
                             android:scaleType="fitXY"
                             android:src="@drawable/floating" />
+
+                    </androidx.cardview.widget.CardView>
+
+                    <!-- Button Folder -->
+                    <androidx.cardview.widget.CardView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_above="@id/floatingContainer"
+                        android:layout_alignStart="@id/floatingContainer"
+                        android:layout_marginBottom="0dp"
+                        app:cardCornerRadius="20dp">
+
+                        <ImageView
+                            android:id="@+id/decryptButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/folder" />
 
                     </androidx.cardview.widget.CardView>
 

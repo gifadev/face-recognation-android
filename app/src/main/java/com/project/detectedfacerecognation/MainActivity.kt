@@ -61,22 +61,18 @@ import android.graphics.Matrix
 import com.google.gson.Gson
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.Body
-import retrofit2.http.POST
-import android.os.Environment
-import okhttp3.MediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Call as OkHttpCall
-import okhttp3.Callback as OkHttpCallback
-import okhttp3.Response as OkHttpResponse
-import java.io.InputStream
-import com.project.detectedfacerecognation.api.ApiRest.Base64Request
 import okio.Buffer
 import android.app.AlertDialog
 import android.view.LayoutInflater
 import android.widget.Button
-
+import android.content.ContentValues
+import android.os.Environment
+import android.media.MediaScannerConnection
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import java.security.SecureRandom
+import java.security.MessageDigest
 
 
 class MainActivity : AppCompatActivity() {
@@ -99,6 +95,7 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "Camera2Mirror"
     private var isSessionActive = false
     private var isCapturing = false
+    private val secretKey = "super_secret_key_32_bytes".toByteArray()
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -201,7 +198,7 @@ class MainActivity : AppCompatActivity() {
                 val bitmap = textureView.bitmap
                 if (bitmap != null) {
                     try {
-                        savePhoto(bitmap)
+                        savePhoto(bitmap, this)
                         taken = true
                     } catch (e: Exception) {
                         Log.e(TAG, "Error saving photo", e)
@@ -244,6 +241,22 @@ class MainActivity : AppCompatActivity() {
             openFrontCamera()
             taken = false // Reset status pengambilan foto
         }
+
+        val decryptButton = findViewById<ImageView>(R.id.decryptButton)
+        decryptButton.setOnClickListener {
+            decryptAllPhotos(this, secretKey)
+            showDecryptedPhotos()
+        }
+
+        decryptButton.setOnClickListener {
+            decryptAllPhotos(this, secretKey)
+
+            // Pindah ke DecryptedPhotosActivity
+            val intent = Intent(this, DecryptedPhotosActivity::class.java)
+            startActivity(intent)
+        }
+
+
     }
 
     private fun captureFreezeFrame() {
@@ -389,7 +402,7 @@ class MainActivity : AppCompatActivity() {
         maxWidth: Int = 1300,
         maxHeight: Int = 1920,
         minWidth: Int = 1080,
-        minHeight: Int = 1250
+        minHeight: Int = 1350
     ) {
         val aspectRatio: Float = if (previewWidth > previewHeight) {
             previewWidth.toFloat() / previewHeight
@@ -417,24 +430,186 @@ class MainActivity : AppCompatActivity() {
         textureView.layoutParams = layoutParams
     }
 
-    private fun savePhoto(bitmap: Bitmap) {
-        val photoFile = File(
-            externalCacheDir,
-            SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
-                .format(System.currentTimeMillis()) + ".jpg"
-        )
-
-        filePhoto = photoFile
-
+    fun encryptFile(
+        inputFilePath: String,
+        outputFilePath: String,
+        metadataFilePath: String,
+        secretKey: ByteArray
+    ) {
         try {
-            FileOutputStream(photoFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-            }
-            processImage(photoFile)
-        } catch (e: IOException) {
-            Log.e(TAG, "Error saving photo", e)
-            throw e
+            // Generate salt
+            val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+
+            // Derive Key dan IV dari salt dan secret key
+            val (key, iv) = deriveKeyAndIv(secretKey, salt)
+
+            // Inisialisasi Cipher untuk enkripsi
+            val cipher = Cipher.getInstance("AES/CFB/NoPadding")
+            val secretKeySpec = SecretKeySpec(key, "AES")
+            val ivSpec = IvParameterSpec(iv)
+            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, ivSpec)
+
+            // Baca data file asli
+            val inputFile = File(inputFilePath)
+            val inputData = inputFile.readBytes()
+
+            // Enkripsi data
+            val encryptedData = cipher.doFinal(inputData)
+
+            // Tulis data terenkripsi ke file baru
+            val outputFile = File(outputFilePath)
+            outputFile.writeBytes(encryptedData)
+
+            // Simpan salt ke metadata file
+            val metadataFile = File(metadataFilePath)
+            metadataFile.writeText("salt=${Base64.encodeToString(salt, Base64.DEFAULT)}")
+
+            println("File berhasil dienkripsi: $outputFilePath")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            println("Gagal mengenkripsi file: ${e.message}")
         }
+    }
+
+    fun deriveKeyAndIv(password: ByteArray, salt: ByteArray): Pair<ByteArray, ByteArray> {
+        val keySize = 32 // 256-bit key
+        val ivSize = 16 // 128-bit IV
+        val totalSize = keySize + ivSize
+
+        // KDF menggunakan SHA-256
+        val keyAndIv = ByteArray(totalSize)
+        val digest = MessageDigest.getInstance("SHA-256")
+        var lastDigest: ByteArray? = null
+
+        var generatedBytes = 0
+        while (generatedBytes < totalSize) {
+            if (lastDigest != null) {
+                digest.update(lastDigest)
+            }
+            digest.update(password)
+            digest.update(salt)
+            lastDigest = digest.digest()
+
+            val copyLength = Math.min(lastDigest.size, totalSize - generatedBytes)
+            System.arraycopy(lastDigest, 0, keyAndIv, generatedBytes, copyLength)
+            generatedBytes += copyLength
+        }
+
+        val key = keyAndIv.copyOfRange(0, keySize)
+        val iv = keyAndIv.copyOfRange(keySize, totalSize)
+        return Pair(key, iv)
+    }
+
+    private fun savePhoto(bitmap: Bitmap, context: Context) {
+        // Simpan bitmap ke file asli (belum terenkripsi)
+        val originalFile = File.createTempFile("temp_photo", ".jpg", context.cacheDir)
+        FileOutputStream(originalFile).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
+
+        // Simpan referensi file asli ke filePhoto
+        filePhoto = originalFile
+        sendData()
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(System.currentTimeMillis())
+        // Path untuk file terenkripsi dan metadata
+        val encryptedFilePath = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "$timestamp.jpg").absolutePath
+        val metadataFilePath = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "$timestamp.txt").absolutePath
+
+        // Secret key (harus sama dengan yang digunakan untuk dekripsi)
+        val secretKey = "super_secret_key_32_bytes".toByteArray()
+
+        // Enkripsi file asli dan simpan ke file terenkripsi
+        encryptFile(originalFile.absolutePath, encryptedFilePath, metadataFilePath, secretKey)
+
+        // Panggil Media Scanner untuk memindai file terenkripsi
+        MediaScannerConnection.scanFile(
+            context,
+            arrayOf(encryptedFilePath),
+            arrayOf("image/jpeg"),
+            null
+        )
+        println("Lokasi file terenkripsi: $encryptedFilePath")
+    }
+
+    fun decryptFile(
+        inputFilePath: String,
+        outputFilePath: String,
+        metadataFilePath: String,
+        secretKey: ByteArray
+    ) {
+        try {
+            // Baca salt dari metadata file
+            val metadataFile = File(metadataFilePath)
+            val saltBase64 = metadataFile.readText().substringAfter("salt=").trim()
+            val salt = Base64.decode(saltBase64, Base64.DEFAULT)
+
+            // Derive Key dan IV dari salt dan secret key
+            val (key, iv) = deriveKeyAndIv(secretKey, salt)
+
+            // Inisialisasi Cipher untuk dekripsi
+            val cipher = Cipher.getInstance("AES/CFB/NoPadding")
+            val secretKeySpec = SecretKeySpec(key, "AES")
+            val ivSpec = IvParameterSpec(iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivSpec)
+
+            // Baca data file terenkripsi
+            val inputFile = File(inputFilePath)
+            val encryptedData = inputFile.readBytes()
+
+            // Dekripsi data
+            val decryptedData = cipher.doFinal(encryptedData)
+
+            // Tulis data terdekripsi ke file baru
+            val outputFile = File(outputFilePath)
+            outputFile.writeBytes(decryptedData)
+
+            println("File berhasil didekripsi: $outputFilePath")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun decryptAllPhotos(context: Context, secretKey: ByteArray) {
+        val pictureDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        val files = pictureDir?.listFiles()
+
+        if (files != null) {
+            for (file in files) {
+                if (file.name.endsWith(".jpg")) {
+                    val metadataFilePath = file.absolutePath.replace(".jpg", ".txt")
+                    val outputFilePath = file.absolutePath.replace(".jpg", "_decrypted.jpg")
+
+                    decryptFile(file.absolutePath, outputFilePath, metadataFilePath, secretKey)
+                }
+            }
+        }
+    }
+
+    private fun showDecryptedPhotos() {
+        val pictureDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        val files = pictureDir?.listFiles()
+
+        if (files != null) {
+            for (file in files) {
+                if (file.name.endsWith("_decrypted.jpg")) {
+                    val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                    // Tampilkan bitmap di UI (misalnya di ImageView)
+                    // Contoh: imageView.setImageBitmap(bitmap)
+                }
+            }
+        }
+    }
+
+    // Fungsi untuk mendapatkan path file dari URI
+    private fun getRealPathFromURI(uri: Uri): String {
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            it.moveToFirst()
+            val columnIndex = it.getColumnIndex(MediaStore.Images.Media.DATA)
+            return it.getString(columnIndex)
+        }
+        return ""
     }
 
 
@@ -604,53 +779,20 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var freezeFrame: ImageView
 
-    private fun takePhoto() {
-        val imageCapture = imageCapture ?: return
 
-
-        val photoFile = File(
-            externalCacheDir,
-            SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
-                .format(System.currentTimeMillis()) + ".jpg"
-        )
-
-        filePhoto = photoFile
-
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    Log.d("CameraX", "Photo saved at ${photoFile.absolutePath}")
-                    processImage(photoFile)
-
-                    taken = false
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
-
-                    taken = false
-                }
-            }
-        )
-    }
-
-
-    private fun processImage(photoFile: File) {
-        val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-
-        // Resize the image if it's too large
-        val resizedBitmap = resizeImage(bitmap, 1024) // Resize to a max width of 1024px
-
-        val faceDetector: FaceDetector = FaceDetection.getClient(
-            FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                .build()
-        )
-        sendData()
-    }
+//    private fun processImage(photoFile: File) {
+//        val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+//
+//        // Resize the image if it's too large
+//        val resizedBitmap = resizeImage(bitmap, 1024) // Resize to a max width of 1024px
+//
+//        val faceDetector: FaceDetector = FaceDetection.getClient(
+//            FaceDetectorOptions.Builder()
+//                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+//                .build()
+//        )
+//        sendData()
+//    }
 
     private fun extracted() {
         filePhoto
@@ -912,7 +1054,6 @@ class MainActivity : AppCompatActivity() {
             // API V2:
             image = MultipartBody.Part.createFormData("img64", filePhoto!!.name, mFile)
             val base64Image = multipartToBase64(image) ?: ""
-            Log.d("BASE64_IMAGE", "Base64 Image: $base64Image")
             mApiRest.sendPictureV2(base64Image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
                     if (response.isSuccessful && response.body() != null) {
@@ -933,106 +1074,76 @@ class MainActivity : AppCompatActivity() {
                                             val responseObj = jsonResponse.getJSONObject("response")
                                             Log.d("API_RESPONSE", "Response Object: $responseObj")
 
-                                            if (responseObj.has("candidates")) {
-                                                val candidatesArray = responseObj.getJSONArray("candidates")
-                                                Log.d("API_RESPONSE", "Candidates Array: $candidatesArray")
+                                            // Ekstrak data dari objek response
+                                            val fullName = responseObj.optString("fname", "N/A")
+                                            val gender = formatGender(responseObj.optString("gender", "N/A"))
+                                            val birthDate = formatDate(responseObj.optString("dob", "N/A"))
+                                            val score = responseObj.optString("score", "")
+                                            val base64Image = responseObj.optString("img", "")
+                                            val bitmap = base64ToBitmap(base64Image)
 
-                                                if (candidatesArray.length() > 0) {
-                                                    val firstCandidate = candidatesArray.getJSONObject(0)
-                                                    val facial = firstCandidate.getJSONObject("facial")
+                                            if (responseObj.getString("similarity") == "IDENTICAL") {
+                                                // Buat intent untuk membuka ResultActivity
+                                                val intent = Intent(context, ResultActivity::class.java).apply {
+                                                    putExtra("full_name", fullName)
+                                                    putExtra("gender", gender)
+                                                    putExtra("birth_date", birthDate)
+                                                    putExtra("score", score)
+                                                    if (bitmap != null) {
+                                                        // Simpan bitmap sebagai byte array
+                                                        val stream = ByteArrayOutputStream()
+                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                                        val byteArray = stream.toByteArray()
+                                                        putExtra("image_bitmap", byteArray)
+                                                    }
+                                                }
 
-                                                    if (firstCandidate.has("demographics")) {
-                                                        if (facial.getString("similarity") == "IDENTICAL") {
-                                                            val demographics = firstCandidate.getJSONObject("demographics")
-                                                            Log.d("API_RESPONSE", "Demographics: $demographics")
+                                                //send to pvs
+                                                val retrofit = Retrofit.Builder()
+                                                    .baseUrl("http://157.245.200.237/")
+                                                    .addConverterFactory(GsonConverterFactory.create())
+                                                    .build()
 
-                                                            // Ekstrak data dari objek demographics
-                                                            val fullName = demographics.optString("fname", "N/A")
-                                                            val gender = formatGender(demographics.optString("gender", "N/A"))
-                                                            val birthDate = formatDate(demographics.optString("dob", "N/A"))
-                                                            val nationality = demographics.optString("nat", "N/A")
-                                                            val passportNumber = demographics.optString("nopaspor", "N/A")
+                                                val apiService = retrofit.create(ApiRest::class.java)
+                                                val call = apiService.sendBiometricData(jsonObject)
 
-                                                            if (firstCandidate.has("facial")) {
-                                                                val facial = firstCandidate.getJSONObject("facial")
-                                                                val score = facial.optString("score", "")
-                                                                val base64Image = facial.optString("img", "")
-                                                                val bitmap = base64ToBitmap(base64Image)
-
-                                                                // Buat intent untuk membuka ResultActivity
-                                                                val intent = Intent(context, ResultActivity::class.java).apply {
-                                                                    putExtra("full_name", fullName)
-                                                                    putExtra("gender", gender)
-                                                                    putExtra("birth_date", birthDate)
-                                                                    putExtra("nationality", nationality)
-                                                                    putExtra("passport_number", passportNumber)
-                                                                    putExtra("score", score)
-                                                                    if (bitmap != null) {
-                                                                        // Simpan bitmap sebagai byte array
-                                                                        val stream = ByteArrayOutputStream()
-                                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                                                                        val byteArray = stream.toByteArray()
-                                                                        putExtra("image_bitmap", byteArray)
-                                                                    }
-                                                                }
-
-                                                                //send to pvs
-                                                                val retrofit = Retrofit.Builder()
-                                                                    .baseUrl("http://157.245.200.237/")
-                                                                    .addConverterFactory(GsonConverterFactory.create())
-                                                                    .build()
-
-                                                                val apiService = retrofit.create(ApiRest::class.java)
-                                                                val call = apiService.sendBiometricData(jsonObject)
-
-                                                                call.enqueue(object : Callback<JsonObject> {
-                                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                                                                        if (response.isSuccessful) {
-                                                                            val responseBody = response.body()
-                                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
-                                                                        } else {
-                                                                            val errorBody = response.errorBody()?.string()
-                                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
-                                                                        }
-                                                                    }
-
-                                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
-                                                                    }
-                                                                })
-
-                                                                tvStatus.visibility = View.VISIBLE
-                                                                tvStatus.text = "Identifying..."
-                                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                                    startActivity(intent)
-                                                                    loading.visibility = View.GONE
-                                                                    tvStatus.visibility = View.GONE
-                                                                    freezeFrame.visibility = View.GONE
-                                                                }, 2000)
-                                                            }
-                                                        }else{
-                                                            Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
-                                                            val intent = Intent(context, AlertDataNotFoundActivity::class.java)
-                                                            loading.visibility = View.GONE
-                                                            tvStatus.visibility = View.GONE
-                                                            freezeFrame.visibility = View.GONE
-                                                            startActivity(intent)
+                                                call.enqueue(object : Callback<JsonObject> {
+                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                                                        if (response.isSuccessful) {
+                                                            val responseBody = response.body()
+                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
+                                                        } else {
+                                                            val errorBody = response.errorBody()?.string()
+                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
                                                         }
                                                     }
-                                                } else {
-                                                    Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
-                                                    val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+
+                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
+                                                    }
+                                                })
+
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    startActivity(intent)
                                                     loading.visibility = View.GONE
                                                     tvStatus.visibility = View.GONE
                                                     freezeFrame.visibility = View.GONE
-                                                    startActivity(intent)
-                                                }
+                                                }, 2000)
+                                            } else {
+                                                Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
+                                                val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                         }
                                     }
                                     "error" -> {
                                         val message = jsonResponse.optString("message", "Terjadi kesalahan yang tidak diketahui.")
-//                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        // Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     else -> {
                                         Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
@@ -1044,7 +1155,6 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
                             } else {
-                                Log.d("API_RESPONSE", "No faces detected, redirecting to AlertFaceNotDetectedActivity")
                                 showErrorAlert(
                                     context = context, // Context dari activity atau fragment
                                     title = "400",
@@ -1229,7 +1339,6 @@ class MainActivity : AppCompatActivity() {
             // API V2: Gunakan field "file"
             image = MultipartBody.Part.createFormData("file", filePhoto!!.name, mFile)
             val base64Image = multipartToBase64(image) ?: ""
-            Log.d("BASE64_IMAGE", "Base64 Image: $base64Image")
             mApiRest.sendPictureV2(base64Image)?.enqueue(object : Callback<JsonObject?> {
                 override fun onResponse(call: Call<JsonObject?>, response: Response<JsonObject?>) {
                     if (response.isSuccessful && response.body() != null) {
@@ -1250,95 +1359,76 @@ class MainActivity : AppCompatActivity() {
                                             val responseObj = jsonResponse.getJSONObject("response")
                                             Log.d("API_RESPONSE", "Response Object: $responseObj")
 
-                                            if (responseObj.has("candidates")) {
-                                                val candidatesArray = responseObj.getJSONArray("candidates")
-                                                Log.d("API_RESPONSE", "Candidates Array: $candidatesArray")
+                                            // Ekstrak data dari objek response
+                                            val fullName = responseObj.optString("fname", "N/A")
+                                            val gender = formatGender(responseObj.optString("gender", "N/A"))
+                                            val birthDate = formatDate(responseObj.optString("dob", "N/A"))
+                                            val score = responseObj.optString("score", "")
+                                            val base64Image = responseObj.optString("img", "")
+                                            val bitmap = base64ToBitmap(base64Image)
 
-                                                if (candidatesArray.length() > 0) {
-                                                    val firstCandidate = candidatesArray.getJSONObject(0)
-                                                    val facial = firstCandidate.getJSONObject("facial")
-                                                    if (firstCandidate.has("demographics")) {
-                                                        if (facial.getString("similarity") == "IDENTICAL") {
-                                                            val demographics = firstCandidate.getJSONObject("demographics")
-                                                            Log.d("API_RESPONSE", "Demographics: $demographics")
-                                                            // Ekstrak data dari objek demographics
-                                                            val fullName = demographics.optString("fname", "N/A")
-                                                            val gender = formatGender(demographics.optString("gender", "N/A"))
-                                                            val birthDate = formatDate(demographics.optString("dob", "N/A"))
-                                                            val nationality = demographics.optString("nat", "N/A")
-                                                            val passportNumber = demographics.optString("nopaspor", "N/A")
+                                            if (responseObj.getString("similarity") == "IDENTICAL") {
+                                                // Buat intent untuk membuka ResultActivity
+                                                val intent = Intent(context, ResultActivity::class.java).apply {
+                                                    putExtra("full_name", fullName)
+                                                    putExtra("gender", gender)
+                                                    putExtra("birth_date", birthDate)
+                                                    putExtra("score", score)
+                                                    if (bitmap != null) {
+                                                        // Simpan bitmap sebagai byte array
+                                                        val stream = ByteArrayOutputStream()
+                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                                                        val byteArray = stream.toByteArray()
+                                                        putExtra("image_bitmap", byteArray)
+                                                    }
+                                                }
 
-                                                            if (firstCandidate.has("facial")) {
-                                                                val facial = firstCandidate.getJSONObject("facial")
-                                                                val score = facial.optString("score", "")
-                                                                val base64Image = facial.optString("img", "")
+                                                //send to pvs
+                                                val retrofit = Retrofit.Builder()
+                                                    .baseUrl("http://157.245.200.237/")
+                                                    .addConverterFactory(GsonConverterFactory.create())
+                                                    .build()
 
-                                                                val bitmap = base64ToBitmap(base64Image)
+                                                val apiService = retrofit.create(ApiRest::class.java)
+                                                val call = apiService.sendBiometricData(jsonObject)
 
-                                                                val intent = Intent(context, ResultActivity::class.java).apply {
-                                                                    putExtra("full_name", fullName)
-                                                                    putExtra("gender", gender)
-                                                                    putExtra("birth_date", birthDate)
-                                                                    putExtra("nationality", nationality)
-                                                                    putExtra("passport_number", passportNumber)
-                                                                    putExtra("score", score)
-                                                                    if (bitmap != null) {
-                                                                        val stream = ByteArrayOutputStream()
-                                                                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                                                                        val byteArray = stream.toByteArray()
-                                                                        putExtra("image_bitmap", byteArray)
-                                                                    }
-                                                                }
-
-                                                                //send to pvs
-                                                                val retrofit = Retrofit.Builder()
-                                                                    .baseUrl("http://157.245.200.237/") // Base URL API biometric-data
-                                                                    .addConverterFactory(GsonConverterFactory.create())
-                                                                    .build()
-
-                                                                val apiService = retrofit.create(ApiRest::class.java)
-                                                                val call = apiService.sendBiometricData(jsonObject)
-                                                                call.enqueue(object : Callback<JsonObject> {
-                                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
-                                                                        if (response.isSuccessful) {
-                                                                            val responseBody = response.body()
-                                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
-                                                                        } else {
-                                                                            val errorBody = response.errorBody()?.string()
-                                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
-                                                                        }
-                                                                    }
-
-                                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
-                                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
-                                                                    }
-                                                                })
-
-                                                                tvStatus.visibility = View.VISIBLE
-                                                                tvStatus.text = "Identifying..."
-                                                                Handler(Looper.getMainLooper()).postDelayed({
-                                                                    startActivity(intent)
-                                                                    loading.visibility = View.GONE
-                                                                    tvStatus.visibility = View.GONE
-                                                                    freezeFrame.visibility = View.GONE
-                                                                }, 2000)
-                                                            }
+                                                call.enqueue(object : Callback<JsonObject> {
+                                                    override fun onResponse(call: Call<JsonObject>, response: Response<JsonObject>) {
+                                                        if (response.isSuccessful) {
+                                                            val responseBody = response.body()
+                                                            Log.d("BIOMETRIC_API_RESPONSE", "Data berhasil dikirim: $responseBody")
+                                                        } else {
+                                                            val errorBody = response.errorBody()?.string()
+                                                            Log.e("BIOMETRIC_API_RESPONSE", "Gagal mengirim data: $errorBody")
                                                         }
                                                     }
-                                                } else {
-                                                    Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
-                                                    val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+
+                                                    override fun onFailure(call: Call<JsonObject>, t: Throwable) {
+                                                        Log.e("BIOMETRIC_API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
+                                                    }
+                                                })
+
+                                                tvStatus.visibility = View.VISIBLE
+                                                tvStatus.text = "Identifying..."
+                                                Handler(Looper.getMainLooper()).postDelayed({
+                                                    startActivity(intent)
                                                     loading.visibility = View.GONE
                                                     tvStatus.visibility = View.GONE
                                                     freezeFrame.visibility = View.GONE
-                                                    startActivity(intent)
-                                                }
+                                                }, 2000)
+                                            } else {
+                                                Log.d("API_RESPONSE", "Data tidak ditemukan, redirecting to AlertDataNotFoundActivity")
+                                                val intent = Intent(context, AlertDataNotFoundActivity::class.java)
+                                                loading.visibility = View.GONE
+                                                tvStatus.visibility = View.GONE
+                                                freezeFrame.visibility = View.GONE
+                                                startActivity(intent)
                                             }
                                         }
                                     }
                                     "error" -> {
                                         val message = jsonResponse.optString("message", "Terjadi kesalahan yang tidak diketahui.")
-//                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                        // Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     }
                                     else -> {
                                         Log.d("API_RESPONSE", "Status tidak dikenali, redirecting to AlertDataNotFoundActivity")
@@ -1359,12 +1449,10 @@ class MainActivity : AppCompatActivity() {
                                         openFrontCamera()
                                     }
                                 )
-
+                                openFrontCamera()
                                 loading.visibility = View.GONE
                                 tvStatus.visibility = View.GONE
                                 freezeFrame.visibility = View.GONE
-                                openFrontCamera()
-
                             }
                         } catch (e: JSONException) {
                             e.printStackTrace()
@@ -1380,7 +1468,7 @@ class MainActivity : AppCompatActivity() {
                     loading.visibility = View.GONE
                     Log.e("API_ERROR", "Koneksi Error: ${t.message ?: "Unknown error"}", t)
                     showErrorAlert(
-                        context = context,
+                        context = context, // Context dari activity atau fragment
                         title = "400",
                         message = "The server cannot process your request",
                         onDismiss = {

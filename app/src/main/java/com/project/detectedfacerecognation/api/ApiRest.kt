@@ -16,15 +16,6 @@ interface ApiRest {
         @Part photo: MultipartBody.Part?
     ): Call<JsonObject?>?
 
-//    @Multipart
-//    @POST("analyze/")  // Untuk versi 2
-//    fun sendPictureV2(
-//        @Part photo: MultipartBody.Part?
-//    ): Call<JsonObject?>?
-    data class Base64Request(
-        val photo: String  // Field untuk Base64 image
-    )
-
     @FormUrlEncoded
     @POST("analyze64/")  // Endpoint baru
     fun sendPictureV2(
